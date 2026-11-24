@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>Feed sanity check</title></head>
+<body>
+  <h1>Feed sanity check — pas le dashboard</h1>
+  <p>Cette page vérifie seulement que les deux flux du marché répondent. Le vrai tableau de bord est ici : <a href="dashboard.html">dashboard.html</a></p>
+  <pre id="out">Loading...</pre>
+<script>
+const MARKET_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/docs/data/market.json";
+const HOLDINGS_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/traders/joel/holdings.json";
+Promise.all([fetch(MARKET_URL).then(r => r.json()), fetch(HOLDINGS_URL).then(r => r.json())])
+  .then(([market, holdings]) => {
+    document.getElementById('out').textContent =
+      'MARKET:\n' + JSON.stringify(market, null, 2) + '\n\nHOLDINGS:\n' + JSON.stringify(holdings, null, 2);
+  })
+  .catch(err => { document.getElementById('out').textContent = 'Could not load data: ' + err; });
+</script>
+</body>
+</html>

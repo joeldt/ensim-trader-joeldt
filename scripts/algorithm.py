@@ -4,7 +4,12 @@ import requests
 
 MARKET_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/docs/data/market.json"
 HOLDINGS_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/traders/joel/holdings.json"
-LOG_PATH = "decision_log.csv"
+LEADERBOARD_URL = "https://raw.githubusercontent.com/exofri/ensim-trade-center/refs/heads/main/docs/data/leaderboard.json"
+MY_ID = "joel"
+BASELINES = ["random_trader", "random_buyer", "random_seller"]
+LOG_PATH = "docs/data/decision_log.csv"
+PERF_PATH = "docs/data/performance_log.csv"
+SIGNAL_PATH = "docs/data/signal.json"
 
 MIN_MONEY_RESERVE = 50   # never let a buy signal spend below this much money
 MIN_HISTORY = 40         # below this, not enough ticks to see a cycle: hold
@@ -57,8 +62,13 @@ def analyse(prices):
     signal = float(np.clip(expected_move / amplitude, -1, 1))
     reason = ("hausse attendue, achat" if signal > 0.05 else
               "baisse attendue, vente" if signal < -0.05 else "pas de mouvement net attendu")
+    # Fitted wave on the last ticks + forecast, saved for the dashboard
+    shown = min(n, 120)
+    fitted = [round(float(predict(coef, period, i)), 4) for i in range(n - shown, n)]
+    forecast = [round(float(predict(coef, period, n + k)), 4) for k in range(0, horizon + 1)]
     return signal, {"period": int(period), "amplitude": round(amplitude, 3),
-                    "expected_move": round(expected_move, 3), "reason": reason}
+                    "expected_move": round(expected_move, 3), "reason": reason,
+                    "fitted": fitted, "forecast": forecast}
 
 
 def compute_signal(prices):
@@ -97,12 +107,36 @@ def append_log(tick, decision, details, holdings):
                         round(holdings["products"][p], 2), d["reason"]])
 
 
+def already_logged(path, tick):
+    if not os.path.exists(path):
+        return False
+    with open(path, encoding="utf-8") as f:
+        return any(r["tick"] == str(tick) for r in csv.DictReader(f))
+
+
+def log_performance(tick, leaderboard):
+    # One row per market tick: my total value and the three baselines' values.
+    if already_logged(PERF_PATH, tick):
+        return
+    values = {r["id"]: r["total_value"] for r in leaderboard["leaderboard"]}
+    ranking = [r["id"] for r in leaderboard["leaderboard"]]
+    new_file = not os.path.exists(PERF_PATH)
+    with open(PERF_PATH, "a", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        if new_file:
+            w.writerow(["tick", "generated_at", "me"] + BASELINES + ["rank", "n_traders"])
+        w.writerow([tick, leaderboard["generated_at"], values.get(MY_ID)]
+                   + [values.get(b) for b in BASELINES]
+                   + [ranking.index(MY_ID) + 1 if MY_ID in ranking else "", len(ranking)])
+
+
 def main():
     market = fetch_json(MARKET_URL)
     holdings = fetch_json(HOLDINGS_URL)
     products = market["products"]
     history = market["history"]
     tick = history[-1]["t"] if history else 0
+    os.makedirs("docs/data", exist_ok=True)
 
     decision, details = {}, {}
     money_left = holdings["money"]   # the market executes A, then B, then C with the same money
@@ -114,12 +148,25 @@ def main():
         if decision[p] > 0:
             money_left -= 100 * decision[p] * current_price
         details[p] = info
-        print(f"{p}: signal {decision[p]:+.3f}  {info}")
+        print(f"{p}: signal {decision[p]:+.3f}  period {info.get('period')}  {info['reason']}")
 
     decision["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     with open("decision.json", "w", encoding="utf-8") as f:
         json.dump(decision, f, indent=2)
     append_log(tick, decision, details, holdings)
+    log_performance(tick, fetch_json(LEADERBOARD_URL))
+    signal_data = {"tick": tick, "updated_at": decision["updated_at"], "money": holdings["money"],
+                   "holdings": holdings["products"], "products": {}}
+    for p in products:
+        prices = [row[p] for row in history]
+        shown = len(details[p].get("fitted", []))
+        signal_data["products"][p] = {
+            "signal": decision[p], **{k: v for k, v in details[p].items()},
+            "ticks": [row["t"] for row in history[-shown:]] if shown else [],
+            "prices": prices[-shown:] if shown else [],
+        }
+    with open(SIGNAL_PATH, "w", encoding="utf-8") as f:
+        json.dump(signal_data, f, indent=1)
     print(f"Tick {tick} -- wrote decision.json: {decision}")
 
 
