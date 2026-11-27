@@ -20,3 +20,6 @@ tick,updated_at,product,signal,period,expected_move,money,units_held,reason
 384,2026-11-26T19:13:14Z,A,0.22,48,0.483,156.32,1238.5,"hausse attendue, achat"
 384,2026-11-26T19:13:14Z,B,-0.136,97,-0.143,156.32,1024.8,"baisse attendue, vente"
 384,2026-11-26T19:13:14Z,C,-0.81,24,-0.296,156.32,552.1,"baisse attendue, vente"
+385,2026-11-27T02:20:36Z,A,0.501,48,0.442,305.65,1260.5,"hausse attendue, achat"
+385,2026-11-27T02:20:36Z,B,-0.184,97,-0.193,305.65,1011.2,"baisse attendue, vente"
+385,2026-11-27T02:20:36Z,C,-0.689,24,-0.251,305.65,471.1,"baisse attendue, vente"
